@@ -13,6 +13,10 @@ project2/                <- Project Repository
 ├── data/                <- Example data files for testing
 │   ├── prc0.dat         <- <PRICE_DAT> example file
 │   └── ret0.dat         <- <RET_DAT> example file
+├── contributions/       <- Directory for manual contribution upload
+│   ├── swathi.py        <- swathi function contribution file
+│   ├── nin.py           <- nin function contribution file
+│   └── driscoll.py      <- driscoll function contribution file
 ├── __init__.py          <- Initialization file
 ├── project2_main.py     <- Primary file to complete and submit
 ├── verify.py            <- Script to validate your code before submission
