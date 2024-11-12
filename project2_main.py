@@ -15,7 +15,7 @@ import tk_utils
 
 
 # ----------------------------------------------------------------------------
-#   Aux functions 
+#   Aux functions
 # ----------------------------------------------------------------------------
 def read_dat(pth: str) -> pd.DataFrame:
     """ Create a data frame with the raw content of a .dat file.
@@ -65,7 +65,6 @@ def str_to_float(value: str) -> float:
     return float(out)
 
 
-
 def fmt_col_name(label: str) -> str:
     """ Formats a column name according to the rules specified in the "Project
     Description" slide
@@ -91,6 +90,8 @@ def fmt_col_name(label: str) -> str:
     """
     # <COMPLETE_THIS_PART>
 
+    return "_".join(label.strip().lower().split())
+
 
 def fmt_ticker(value: str) -> str:
     """ Formats a ticker value according to the rules specified in the "Project
@@ -108,6 +109,8 @@ def fmt_ticker(value: str) -> str:
 
     """
     # <COMPLETE_THIS_PART>
+
+    return value.replace("'", "").replace('"', "").replace(" ", "").upper()
 
 
 def read_prc_dat(pth: str):
@@ -132,7 +135,7 @@ def read_prc_dat(pth: str):
     -------
     frame: 
         A dataframe with formatted column names (in any order):
-    
+
          Column     dtype
          ------     -----
          date       datetime64[ns]
@@ -150,6 +153,17 @@ def read_prc_dat(pth: str):
     """
     # <COMPLETE_THIS_PART>
 
+    # construct path (assuming pth is the relative path to prc.dat?)
+    # TODO - check this jawn
+    abspath = os.path.join(os.getcwd(), pth)
+    raw = pd.read_csv(abspath)
+
+    formatted = raw.loc[:, ['Date', 'Ticker', 'Low', 'Volume']]
+
+    return formatted
+
+
+read_prc_dat("data/prc0.dat")
 
 
 def read_ret_dat(pth: str) -> pd.DataFrame:
@@ -172,7 +186,7 @@ def read_ret_dat(pth: str) -> pd.DataFrame:
     -------
     frame: 
         A dataframe with columns (in any order):
-    
+
           Column        dtype
           ------        -----
           date          datetime64[ns]
@@ -189,12 +203,11 @@ def read_ret_dat(pth: str) -> pd.DataFrame:
     # <COMPLETE_THIS_PART>
 
 
-
 def mk_ret_df(
         pth_prc_dat: str,
         pth_ret_dat: str,
         tickers: list[str],
-        ):
+):
     """ Combine information from two sources to produce a data frame 
     with stock and market returns according to the following rules:
 
@@ -245,8 +258,3 @@ def mk_ret_df(
 
     """
     # <COMPLETE_THIS_PART>
-
-
-
-
-
