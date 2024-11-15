@@ -11,7 +11,7 @@ import os
 import numpy as np
 import pandas as pd
 
-import tk_utils
+import tkutils
 
 
 # ----------------------------------------------------------------------------
@@ -158,12 +158,35 @@ def read_prc_dat(pth: str):
     abspath = os.path.join(os.getcwd(), pth)
     raw = pd.read_csv(abspath)
 
-    formatted = raw.loc[:, ['Date', 'Ticker', 'Low', 'Volume']]
+    # format headers
+    raw.columns = [fmt_col_name(name) for name in raw.columns]
 
-    return formatted
+    # sanitise data using regular expressions
+    raw = raw.replace({
+        r'[Oo]': 0,
+        r".*-.*": np.nan,
+        r'^["\']|["\']$': ''},
+        regex=True)
 
+    dtypes = {
+        "close": "float64",
+        "date": "datetime64[ns]",
+        "ticker": "object",
+        "adj_close": "float64",
+        "high": "float64",
+        "low": "float64",
+        "open": "float64",
+        "volume": "float64"
+    }
 
-read_prc_dat("data/prc0.dat")
+    # apply dtype map
+    final = raw.astype(dtypes)
+
+    # format tickers
+    final['ticker'] = [fmt_ticker(tic) for tic in final['ticker']]
+
+    # return only requested slice of df
+    return final.loc[:, ['date', 'ticker', 'low', 'volume']]
 
 
 def read_ret_dat(pth: str) -> pd.DataFrame:
@@ -201,6 +224,32 @@ def read_ret_dat(pth: str) -> pd.DataFrame:
 
     """
     # <COMPLETE_THIS_PART>
+    abspath = os.path.join(os.getcwd(), pth)
+    raw = pd.read_csv(abspath)
+
+    # format headers
+    raw.columns = [fmt_col_name(name) for name in raw.columns]
+
+    # sanitise data
+    raw = raw.replace({
+        r'[Oo]': 0,
+        r'^["\']|["\']$': ''},
+        regex=True)  # replace O's and remove quotes
+
+    dtypes = {
+        "date": "datetime64[ns]",
+        "ticker": "object",
+        "return": "float64",
+        "volume": "float64"
+    }
+
+    # apply dtype map
+    final = raw.astype(dtypes)
+
+    # format tickers
+    final['ticker'] = [fmt_ticker(tic) for tic in final['ticker']]
+
+    return final
 
 
 def mk_ret_df(
