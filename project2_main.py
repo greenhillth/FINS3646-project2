@@ -335,10 +335,11 @@ def mk_ret_df(
     returns_df = returns_df.melt(id_vars=['date', 'mkt'],
                                  var_name='ticker', value_name='return')
 
-    # add
+    # add values from .dat files
     all_returns = returns_df.merge(
         prc_filt[['date', 'ticker', 'return']], on=['date', 'ticker'], how='left', suffixes=('', '_prc'))
 
+    # merge prc data first, then address any nan values using returns from ret0
     all_returns['return'] = all_returns['return'].combine_first(
         all_returns['return_prc'])
 
@@ -347,6 +348,7 @@ def mk_ret_df(
     all_returns['return'] = all_returns['return'].combine_first(
         all_returns['return_ret'])
 
+    # pivot dataframe and collate returns per-day
     final_df = all_returns[['date', 'mkt', 'ticker', 'return']].pivot(
         index='date', columns='ticker', values='return')
 
