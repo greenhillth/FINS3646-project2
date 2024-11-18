@@ -179,8 +179,8 @@ def read_prc_dat(pth: str):
         "volume": "float64"
     }
 
-    # apply dtype map
-    final = raw.astype(dtypes)
+    # apply dtype map & remove duplicates
+    final = raw.astype(dtypes).drop_duplicates()
 
     # format tickers
     final['ticker'] = [fmt_ticker(tic) for tic in final['ticker']]
@@ -247,7 +247,7 @@ def read_ret_dat(pth: str) -> pd.DataFrame:
     }
 
     # apply dtype map
-    final = raw.astype(dtypes)
+    final = raw.astype(dtypes).drop_duplicates()
 
     # format tickers
     final['ticker'] = [fmt_ticker(tic) for tic in final['ticker']]
@@ -311,52 +311,52 @@ def mk_ret_df(
     """
     # <COMPLETE_THIS_PART>
 
-    prc_df = read_prc_dat(pth_prc_dat).sort_values(
-        'date', ascending=True)
+    prc_df = read_prc_dat(pth_prc_dat).sort_values('date', ascending=True)
     ret_df = read_ret_dat(pth_ret_dat).sort_values('date', ascending=True)
 
     tic_fmtd = [fmt_ticker(tic) for tic in tickers]
 
     # get dates with returns
-    returns_df = ret_df.loc[ret_df['ticker'] == 'MKT', ['date', 'return']]
-    for tic in tickers:
-        returns_df[fmt_col_name(tic)] = np.nan
+    returns_df = ret_df.loc[ret_df['ticker'] ==
+                            'MKT', ['date', 'return']]
+    for tic in tic_fmtd:
+        returns_df[tic] = np.nan
+
+    returns_df.rename(columns={'return': 'mkt'}, inplace=True)
 
     # filter both dataframes
     prc_filt = prc_df[prc_df['date'].isin(returns_df['date'])].dropna()
+    prc_filt = prc_filt[prc_filt['ticker'].isin(tic_fmtd)]
+
     ret_filt = ret_df[ret_df['date'].isin(returns_df['date'])].dropna()
+    ret_filt = ret_filt[ret_filt['ticker'].isin(tic_fmtd)]
 
-    returns_df.rename(columns={'return': 'mkt'}, inplace=True)
-    returns_df.set_index('date', inplace=True)
+    # decompose table to long form
+    returns_df = returns_df.melt(id_vars=['date', 'mkt'],
+                                 var_name='ticker', value_name='return')
 
-    # iterate over prc and assign returns for each date
-    for idx, row in prc_filt.iterrows():
-        date = row['date']
-        tic = row['ticker']
+    # add
+    all_returns = returns_df.merge(
+        prc_filt[['date', 'ticker', 'return']], on=['date', 'ticker'], how='left', suffixes=('', '_prc'))
 
-        if tic_fmtd.count(tic) > 0:
-            try:
-                returns_df.loc[date, fmt_col_name(tic)] = row['return']
-            except KeyError:
-                continue
+    all_returns['return'] = all_returns['return'].combine_first(
+        all_returns['return_prc'])
 
-    # iterate over nan values and fill remaining
-    for idx, row in ret_filt.iterrows():
+    all_returns = all_returns.merge(
+        ret_filt[['date', 'ticker', 'return']], on=['date', 'ticker'], how='left', suffixes=('', '_ret'))
+    all_returns['return'] = all_returns['return'].combine_first(
+        all_returns['return_ret'])
 
-        tic = row['ticker']
-        date = row['date']
+    final_df = all_returns[['date', 'mkt', 'ticker', 'return']].pivot(
+        index='date', columns='ticker', values='return')
 
-        if tic_fmtd.count(tic) > 0:
-            try:
-                if np.isnan(returns_df.loc[date, fmt_col_name(tic)]):
-                    returns_df.loc[date, fmt_col_name(tic)] = row['return']
-            except KeyError:
-                continue
+    # replace market data
+    final_df = returns_df[['date', 'mkt']].merge(
+        final_df, on='date')
 
-    print('balls')
+    # format column labels and set date as idx
+    final_df.columns = [fmt_col_name(
+        col) for col in final_df.columns]
+    final_df.set_index('date', inplace=True)
 
-    return returns_df
-
-
-# test
-# mk_ret_df('data/prc0.dat', 'data/ret0.dat', ['AAPL', 'GE', 'DAL'])
+    return final_df
