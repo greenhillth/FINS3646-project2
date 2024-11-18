@@ -11,7 +11,7 @@ import os
 import numpy as np
 import pandas as pd
 
-import tkutils
+import tk_utils
 
 
 # ----------------------------------------------------------------------------
@@ -29,7 +29,7 @@ def read_dat(pth: str) -> pd.DataFrame:
     Parameters
     ----------
     pth: str
-        The location of a .dat file. 
+        The location of a .dat file.
 
     Returns
     -------
@@ -43,12 +43,12 @@ def read_dat(pth: str) -> pd.DataFrame:
 
 def str_to_float(value: str) -> float:
     """ This function attempts to convert a string into a float. It returns a
-    float if the conversion is successful and None otherwise. 
+    float if the conversion is successful and None otherwise.
 
     Parameters
     ----------
     value: str
-        A string representing a float. Quotes and spaces will be ignored. 
+        A string representing a float. Quotes and spaces will be ignored.
 
     Returns
     -------
@@ -78,7 +78,7 @@ def fmt_col_name(label: str) -> str:
     Returns
     -------
     str:
-        The formatted column label. 
+        The formatted column label.
 
     Examples
     --------
@@ -115,7 +115,7 @@ def fmt_ticker(value: str) -> str:
 
 def read_prc_dat(pth: str):
     """ This function produces a data frame with volume and return from a single
-    `<PRICE_DAT>` file. 
+    `<PRICE_DAT>` file.
 
     This function should clean the original data in `<PRICE_DAT>` as described
     in the "Project description" slide.
@@ -133,7 +133,7 @@ def read_prc_dat(pth: str):
 
     Returns
     -------
-    frame: 
+    frame:
         A dataframe with formatted column names (in any order):
 
          Column     dtype
@@ -163,8 +163,8 @@ def read_prc_dat(pth: str):
 
     # sanitise data using regular expressions
     raw = raw.replace({
-        r'[Oo]': 0,
-        r".*-.*": np.nan,
+        # r'[Oo]': 0,
+        # r".*-.*": np.nan,
         r'^["\']|["\']$': ''},
         regex=True)
 
@@ -185,13 +185,16 @@ def read_prc_dat(pth: str):
     # format tickers
     final['ticker'] = [fmt_ticker(tic) for tic in final['ticker']]
 
+    # add return column
+    final['return'] = final.groupby('ticker')['adj_close'].pct_change()*100
+
     # return only requested slice of df
-    return final.loc[:, ['date', 'ticker', 'low', 'volume']]
+    return final.loc[:, ['date', 'ticker', 'volume', 'return']]
 
 
 def read_ret_dat(pth: str) -> pd.DataFrame:
     """ This function produces a data frame with volume and returns from a single
-    `<RET_DAT>` file. 
+    `<RET_DAT>` file.
 
 
     This function should clean the original data in `<RET_DAT>` as described
@@ -207,7 +210,7 @@ def read_ret_dat(pth: str) -> pd.DataFrame:
 
     Returns
     -------
-    frame: 
+    frame:
         A dataframe with columns (in any order):
 
           Column        dtype
@@ -219,7 +222,7 @@ def read_ret_dat(pth: str) -> pd.DataFrame:
 
     Notes
     -----
-    This .dat file also includes market returns. Market returns are 
+    This .dat file also includes market returns. Market returns are
     represented by a special ticker called 'MKT'
 
     """
@@ -232,7 +235,7 @@ def read_ret_dat(pth: str) -> pd.DataFrame:
 
     # sanitise data
     raw = raw.replace({
-        r'[Oo]': 0,
+        # r'[Oo]': 0,
         r'^["\']|["\']$': ''},
         regex=True)  # replace O's and remove quotes
 
@@ -257,7 +260,7 @@ def mk_ret_df(
         pth_ret_dat: str,
         tickers: list[str],
 ):
-    """ Combine information from two sources to produce a data frame 
+    """ Combine information from two sources to produce a data frame
     with stock and market returns according to the following rules:
 
     - Returns should be computed using information from <PRICE_DAT>, if
@@ -281,7 +284,7 @@ def mk_ret_df(
 
     tickers: list
         A list of (possibly unformatted) tickers to be included in the output
-        data frame. 
+        data frame.
 
     Returns
     -------
@@ -289,7 +292,7 @@ def mk_ret_df(
         A data frame with a DatetimeIndex and the following columns (in any
         order):
 
-        Column      dtype 
+        Column      dtype
         ------      -----
         <tic0>      float64
         <tic1>      float64
@@ -307,3 +310,52 @@ def mk_ret_df(
 
     """
     # <COMPLETE_THIS_PART>
+
+    prc_df = read_prc_dat(pth_prc_dat).sort_values(
+        'date', ascending=True)
+    ret_df = read_ret_dat(pth_ret_dat).sort_values('date', ascending=True)
+
+    tic_fmtd = [fmt_ticker(tic) for tic in tickers]
+
+    # get dates with returns
+    returns_df = ret_df.loc[ret_df['ticker'] == 'MKT', ['date', 'return']]
+    for tic in tickers:
+        returns_df[fmt_col_name(tic)] = np.nan
+
+    # filter both dataframes
+    prc_filt = prc_df[prc_df['date'].isin(returns_df['date'])].dropna()
+    ret_filt = ret_df[ret_df['date'].isin(returns_df['date'])].dropna()
+
+    returns_df.set_index('date', inplace=True)
+
+    # iterate over prc and assign returns for each date
+    for idx, row in prc_filt.iterrows():
+        tic = row['ticker']
+        date = row['date']
+
+        if tic_fmtd.count(tic) > 0:
+            try:
+                returns_df.loc[date, fmt_col_name(tic)] = row['return']
+            except KeyError:
+                continue
+
+    # iterate over nan values and fill remaining
+    for idx, row in ret_filt.iterrows():
+
+        tic = row['ticker']
+        date = row['date']
+
+        if tic_fmtd.count(tic) > 0:
+            try:
+                if np.isnan(returns_df.loc[date, fmt_col_name(tic)]):
+                    returns_df.loc[date, fmt_col_name(tic)] = row['return']
+            except KeyError:
+                continue
+
+    print('balls')
+
+    return returns_df
+
+
+# test
+# mk_ret_df('data/prc0.dat', 'data/ret0.dat', ['AAPL', 'GE', 'DAL'])
