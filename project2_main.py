@@ -326,12 +326,13 @@ def mk_ret_df(
     prc_filt = prc_df[prc_df['date'].isin(returns_df['date'])].dropna()
     ret_filt = ret_df[ret_df['date'].isin(returns_df['date'])].dropna()
 
+    returns_df.rename(columns={'return': 'mkt'}, inplace=True)
     returns_df.set_index('date', inplace=True)
 
     # iterate over prc and assign returns for each date
     for idx, row in prc_filt.iterrows():
-        tic = row['ticker']
         date = row['date']
+        tic = row['ticker']
 
         if tic_fmtd.count(tic) > 0:
             try:
