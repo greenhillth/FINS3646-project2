@@ -153,20 +153,12 @@ def read_prc_dat(pth: str):
     """
     # <COMPLETE_THIS_PART>
 
-    # construct path (assuming pth is the relative path to prc.dat?)
-    # TODO - check this jawn
+    # construct path (assuming pth given is relative to $CWD)
     abspath = os.path.join(os.getcwd(), pth)
     raw = pd.read_csv(abspath)
 
     # format headers
     raw.columns = [fmt_col_name(name) for name in raw.columns]
-
-    # sanitise data using regular expressions
-    raw = raw.replace({
-        # r'[Oo]': 0,
-        # r".*-.*": np.nan,
-        r'^["\']|["\']$': ''},
-        regex=True)
 
     dtypes = {
         "close": "float64",
@@ -179,6 +171,17 @@ def read_prc_dat(pth: str):
         "volume": "float64"
     }
 
+    numeric_cols = [key for key, value in dtypes.items() if value == "float64"]
+
+    # sanitise data using regular expressions
+    raw = raw.replace({
+        r'^["\']|["\']$': ''},
+        regex=True)
+
+    raw[numeric_cols] = raw[numeric_cols].replace({
+        r'[Oo]': 0,
+        r".*-.*": np.nan}, regex=True)
+
     # apply dtype map & remove duplicates
     final = raw.astype(dtypes).drop_duplicates()
 
@@ -186,7 +189,12 @@ def read_prc_dat(pth: str):
     final['ticker'] = [fmt_ticker(tic) for tic in final['ticker']]
 
     # add return column
-    final['return'] = final.groupby('ticker')['adj_close'].pct_change()*100
+    final['return'] = final.groupby(
+        'ticker')['adj_close'].pct_change(fill_method=None)*100
+
+    # remove error vals (defined as >1000% daily increase)
+    final['return'] = final['return'].mask(
+        final['return'] >= 1000, np.nan)
 
     # return only requested slice of df
     return final.loc[:, ['date', 'ticker', 'volume', 'return']]
@@ -248,6 +256,13 @@ def read_ret_dat(pth: str) -> pd.DataFrame:
 
     # apply dtype map
     final = raw.astype(dtypes).drop_duplicates()
+    final['return'] = final['return'].mask(
+        final['return'] <= -99.0, np.nan)
+    final['return'] = final['return'].mask(
+        final['return'] >= 99.0, np.nan)
+    # replace misinputs with nan
+
+    final['return'] = final['return']*100  # convert to basis points
 
     # format tickers
     final['ticker'] = [fmt_ticker(tic) for tic in final['ticker']]
@@ -316,6 +331,27 @@ def mk_ret_df(
 
     tic_fmtd = [fmt_ticker(tic) for tic in tickers]
 
+    '''
+    ------ NOTE ------
+    original implementation of mk_ret_df relied on row indexing functions, 
+    with the final dataframe constructed by looping through each row in the
+    filtered mkt return tickers and  performing a lookup on the date index.
+    HOWEVER - since each added datapoint had the potential of running two
+    lookup functions for both tables, time complexity was O(n^2) and
+    performance was pretty dismal. 
+
+    The revised functionality uses inbuilt pandas list comprehension and
+    filtering functions. This approach is - in essence - the same as
+    constructing a pivot table in excel. Performance is much more optimal,
+    with an execution time of 0.755s and 2017833 total function calls for
+    this testcase:
+    mk_ret_df('data/prc0.dat', 'data/ret0.dat', ['AAPL', 'CSCO', 'BAC'])
+
+    I'm not sure if this method is taught in the course, however - so the
+    original implementation is still avaliable in the group repository
+    at https://github.com/greenhillth/FINS3646-project2.
+    '''
+
     # get dates with returns
     returns_df = ret_df.loc[ret_df['ticker'] ==
                             'MKT', ['date', 'return']]
@@ -352,7 +388,22 @@ def mk_ret_df(
     final_df = all_returns[['date', 'mkt', 'ticker', 'return']].pivot(
         index='date', columns='ticker', values='return')
 
-    # replace market data
+    '''
+    PIVOT TABLE: Visualisation  
+    all_returns df                            final_df
+    <date> <ticker> <return>     -- to -->    <date> <AAPL> <NVDA> <AAL>
+    --------------------------                --------------------------
+    11.2    AAPL     0.034                    11.2   0.034  0.145  0.009
+    11.2    NVDA     0.145                    12.2   0.024  0.100  -0.02
+    11.2    AAL      0.009                    --------------------------
+    12.2    AAPL     0.024    
+    12.2    NVDA     0.100    
+    12.2    AAL     -0.020    
+    --------------------------
+    Column format still in ticker (uppercase) form - handled below  
+    '''
+
+    # replace market data column
     final_df = returns_df[['date', 'mkt']].merge(
         final_df, on='date')
 
